@@ -2,10 +2,11 @@
 Centralized application configuration.
 
 Uses pydantic-settings so every config value is:
-  - typed (fails fast on startup if misconfigured, not at 2am in prod)
+  - typed (fails fast on startup if misconfigured)
   - overridable via environment variables / .env file
   - never hardcoded across the codebase (single source of truth)
 """
+
 from functools import lru_cache
 from typing import List
 
@@ -14,7 +15,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # --- App ---
     PROJECT_NAME: str = "Zero-Day Attack Detection Platform"
@@ -38,7 +43,9 @@ class Settings(BaseSettings):
             return [i.strip() for i in v.split(",")]
         return v
 
-    # --- PostgreSQL (relational: users, models, training runs, metrics) ---
+    # --- PostgreSQL ---
+    # Local Docker defaults
+    # Production values will be supplied through Render environment variables.
     POSTGRES_HOST: str = "postgres"
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str = "zeroday"
@@ -47,23 +54,58 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL(self) -> str:
-        return (
-            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
-            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        url = (
+            f"postgresql+asyncpg://"
+            f"{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}"
+            f"/{self.POSTGRES_DB}"
         )
 
-    # --- MongoDB (semi-structured: raw dataset samples, SHAP blobs, live events) ---
+        # Neon requires SSL in production.
+        if self.ENVIRONMENT == "production":
+            url += "?ssl=require"
+
+        return url
+
+    # --- MongoDB ---
+    # Local Docker default
+    # Production MONGO_URI will be supplied through Render.
     MONGO_URI: str = "mongodb://mongo:27017"
     MONGO_DB_NAME: str = "zeroday_docs"
 
-    # --- Redis (session cache, JWT blacklist, pub/sub for live dashboard) ---
+    # --- Redis ---
+    # Local Docker defaults
+    # Production values will be supplied through Render.
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
+    REDIS_PASSWORD: str = ""
 
     @property
     def REDIS_URL(self) -> str:
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        """
+        Build the Redis connection URL.
+
+        Local Docker:
+            redis://redis:6379/0
+
+        Production / Upstash:
+            rediss://default:PASSWORD@HOST:6379/0
+
+        rediss:// enables TLS, which is required for
+        the Upstash Redis connection.
+        """
+        if self.REDIS_PASSWORD:
+            return (
+                f"rediss://default:{self.REDIS_PASSWORD}"
+                f"@{self.REDIS_HOST}:{self.REDIS_PORT}"
+                f"/{self.REDIS_DB}"
+            )
+
+        return (
+            f"redis://{self.REDIS_HOST}:"
+            f"{self.REDIS_PORT}/{self.REDIS_DB}"
+        )
 
     # --- File storage ---
     UPLOAD_DIR: str = "/data/uploads"
@@ -76,7 +118,9 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Cached so the .env file is only parsed once per process."""
+    """
+    Cached so the .env file is only parsed once per process.
+    """
     return Settings()
 
 
