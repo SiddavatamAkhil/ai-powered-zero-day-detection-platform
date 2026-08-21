@@ -65,6 +65,7 @@ configured_origins = [
 required_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://zeroday-platform-frontend.onrender.com",
 ]
 
 for origin in required_origins:
