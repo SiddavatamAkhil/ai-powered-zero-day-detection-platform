@@ -14,9 +14,8 @@
 const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
 
 const API_URL =
-  configuredApiUrl && !configuredApiUrl.includes("backend:")
-    ? configuredApiUrl.replace(/\/$/, "")
-    : "http://localhost:8000/api/v1";
+  process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "") ||
+  "http://localhost:8000/api/v1";
 
 /* ---------------------------------------------------------
    Token types
