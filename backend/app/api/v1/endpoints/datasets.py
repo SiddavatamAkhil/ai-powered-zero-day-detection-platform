@@ -39,12 +39,25 @@ async def upload_dataset(
     return dataset
 
 
+import logging
+import traceback
+
+logger = logging.getLogger(__name__)
+
 @router.get("", response_model=list[DatasetRead])
 async def list_datasets(
     user: User = Depends(get_current_user),
     service: DatasetService = Depends(get_dataset_service),
 ):
-    return await service.list_all()
+    try:
+        return await service.list_all()
+    except Exception as exc:
+        tb = traceback.format_exc()
+        logger.error(f"Error in list_datasets: {exc}\n{tb}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Datasets fetch failed [{type(exc).__name__}]: {str(exc)} | TRACE: {tb[-300:]}"
+        )
 
 
 @router.get("/{dataset_id}", response_model=DatasetRead)
