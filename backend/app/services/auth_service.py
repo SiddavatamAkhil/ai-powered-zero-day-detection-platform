@@ -1,8 +1,7 @@
 """
 Auth business logic.
 
-Routers call this service; this service communicates with the repository.
-No HTTP or SQL logic should exist here.
+Routers call this service; the service talks to the repository.
 """
 
 import uuid
@@ -20,8 +19,12 @@ from app.repositories.user_repository import AbstractUserRepository
 from app.schemas.user import TokenPair, UserCreate
 
 
+# Your admin email
+ADMIN_EMAIL = "siddavatamakhil0204@gmail.com"
+
+
 class AuthError(Exception):
-    """Raised for authentication or registration failures."""
+    """Raised for authentication-related failures."""
 
 
 class AuthService:
@@ -29,26 +32,31 @@ class AuthService:
         self._repo = repo
 
     async def register(self, data: UserCreate) -> User:
-        """
-        Register a new user.
-
-        For this project/demo version, every newly registered user
-        is given ADMIN access so the user can test all platform features.
-        """
-
         existing = await self._repo.get_by_email(data.email)
 
         if existing:
-            raise AuthError("A user with this email already exists.")
+            raise AuthError(
+                "A user with this email already exists."
+            )
+
+        # Your account will always be created as ADMIN
+        if data.email.strip().lower() == ADMIN_EMAIL.lower():
+            role = UserRole.ADMIN
+        else:
+            user_count = await self._repo.count_users()
+
+            # First user becomes admin
+            role = (
+                UserRole.ADMIN
+                if user_count == 0
+                else UserRole.VIEWER
+            )
 
         user = User(
-            email=data.email,
+            email=data.email.strip().lower(),
             full_name=data.full_name,
             hashed_password=hash_password(data.password),
-
-            # Give admin access for project/demo usage
-            role=UserRole.ADMIN,
-
+            role=role,
             is_active=True,
         )
 
@@ -59,22 +67,45 @@ class AuthService:
         email: str,
         password: str,
     ) -> TokenPair:
-        """
-        Authenticate a user and return access + refresh tokens.
-        """
+
+        email = email.strip().lower()
 
         user = await self._repo.get_by_email(email)
 
-        if not user or not verify_password(
+        if not user:
+            raise AuthError(
+                "Invalid email or password."
+            )
+
+        if not verify_password(
             password,
             user.hashed_password,
         ):
-            raise AuthError("Invalid email or password.")
+            raise AuthError(
+                "Invalid email or password."
+            )
 
         if not user.is_active:
             raise AuthError(
                 "This account has been deactivated."
             )
+
+        # ==========================================
+        # FORCE YOUR ACCOUNT TO ADMIN
+        # ==========================================
+
+        if user.email.strip().lower() == ADMIN_EMAIL.lower():
+
+            if user.role != UserRole.ADMIN:
+                user.role = UserRole.ADMIN
+
+                # Save the updated role to database.
+                # The SQLAlchemy repository already owns
+                # the session, so we add a method below.
+                await self._repo.update_user_role(
+                    user.id,
+                    UserRole.ADMIN,
+                )
 
         return await self._issue_token_pair(user)
 
@@ -82,9 +113,6 @@ class AuthService:
         self,
         raw_refresh_token: str,
     ) -> TokenPair:
-        """
-        Validate and rotate a refresh token.
-        """
 
         payload = decode_token(raw_refresh_token)
 
@@ -104,7 +132,11 @@ class AuthService:
 
         try:
             user_id = uuid.UUID(payload["sub"])
-        except (KeyError, ValueError, TypeError):
+        except (
+            KeyError,
+            ValueError,
+            TypeError,
+        ):
             raise AuthError(
                 "Invalid refresh token."
             )
@@ -116,21 +148,28 @@ class AuthService:
                 "User not found or inactive."
             )
 
-        # Revoke the old refresh token
+        # Make sure your account remains admin
+        if user.email.strip().lower() == ADMIN_EMAIL.lower():
+
+            if user.role != UserRole.ADMIN:
+                user.role = UserRole.ADMIN
+
+                await self._repo.update_user_role(
+                    user.id,
+                    UserRole.ADMIN,
+                )
+
+        # Rotate refresh token
         await self._repo.revoke_refresh_token(
             raw_refresh_token
         )
 
-        # Issue a completely new access + refresh pair
         return await self._issue_token_pair(user)
 
     async def logout(
         self,
         raw_refresh_token: str,
     ) -> None:
-        """
-        Revoke the refresh token during logout.
-        """
 
         await self._repo.revoke_refresh_token(
             raw_refresh_token
@@ -140,20 +179,17 @@ class AuthService:
         self,
         user: User,
     ) -> TokenPair:
-        """
-        Create access and refresh JWT tokens.
-        """
 
         access = create_token(
-            subject=str(user.id),
-            role=user.role.value,
-            token_type="access",
+            str(user.id),
+            user.role.value,
+            "access",
         )
 
         refresh = create_token(
-            subject=str(user.id),
-            role=user.role.value,
-            token_type="refresh",
+            str(user.id),
+            user.role.value,
+            "refresh",
         )
 
         expires_at = (
