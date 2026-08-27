@@ -64,25 +64,41 @@ class Settings(BaseSettings):
             if "sqlite" in raw_url:
                 return raw_url
 
-            url = raw_url
-            if url.startswith("postgres://"):
-                url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-            elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
-                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            prefix_found = None
+            for prefix in ["postgresql+asyncpg://", "postgresql://", "postgres://"]:
+                if raw_url.startswith(prefix):
+                    prefix_found = prefix
+                    break
 
-            try:
-                parsed = urlparse(url)
-                if "@" in parsed.netloc:
-                    userinfo, hostinfo = parsed.netloc.rsplit("@", 1)
-                    if ":" in userinfo:
-                        user, pwd = userinfo.split(":", 1)
-                        clean_user = quote_plus(unquote(user))
-                        clean_pwd = quote_plus(unquote(pwd))
-                        new_netloc = f"{clean_user}:{clean_pwd}@{hostinfo}"
-                        url = urlunparse((parsed.scheme, new_netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
-            except Exception:
-                pass
+            if not prefix_found:
+                return raw_url
 
+            rest = raw_url[len(prefix_found):]
+
+            query = ""
+            if "?" in rest:
+                rest, query_str = rest.split("?", 1)
+                query = "?" + query_str
+
+            path = ""
+            if "/" in rest:
+                authority, path_str = rest.split("/", 1)
+                path = "/" + path_str
+            else:
+                authority = rest
+
+            if "@" in authority:
+                parts = authority.split("@")
+                host_port = parts[-1]
+                user_pwd = "@".join(parts[:-1])
+
+                if ":" in user_pwd:
+                    user, pwd = user_pwd.split(":", 1)
+                    clean_u = quote_plus(unquote(user))
+                    clean_p = quote_plus(unquote(pwd))
+                    authority = f"{clean_u}:{clean_p}@{host_port}"
+
+            url = f"postgresql+asyncpg://{authority}{path}{query}"
             if "ssl=" not in url:
                 if not any(local_host in url for local_host in ["@localhost", "@127.0.0.1", "@postgres:"]):
                     url += "?ssl=require" if "?" not in url else "&ssl=require"
