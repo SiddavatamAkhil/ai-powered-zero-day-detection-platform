@@ -11,19 +11,31 @@ from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 class DatasetProfileRepository:
     def __init__(self, mongo_db: AsyncIOMotorDatabase):
         self._collection = mongo_db["dataset_profiles"]
 
     async def save_profile(self, dataset_id: str, profile: dict) -> None:
-        document = {
-            "dataset_id": dataset_id,
-            "generated_at": datetime.now(timezone.utc),
-            **profile,
-        }
-        await self._collection.update_one(
-            {"dataset_id": dataset_id}, {"$set": document}, upsert=True
-        )
+        try:
+            document = {
+                "dataset_id": dataset_id,
+                "generated_at": datetime.now(timezone.utc),
+                **profile,
+            }
+            await self._collection.update_one(
+                {"dataset_id": dataset_id}, {"$set": document}, upsert=True
+            )
+        except Exception as exc:
+            logger.warning("MongoDB unavailable; skipping dataset profile persistence: %s", exc)
 
     async def get_profile(self, dataset_id: str) -> dict | None:
-        return await self._collection.find_one({"dataset_id": dataset_id}, {"_id": 0})
+        try:
+            return await self._collection.find_one({"dataset_id": dataset_id}, {"_id": 0})
+        except Exception as exc:
+            logger.warning("MongoDB unavailable; returning empty profile: %s", exc)
+            return None

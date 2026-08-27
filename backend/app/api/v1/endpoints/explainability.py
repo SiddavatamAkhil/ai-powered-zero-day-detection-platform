@@ -18,7 +18,7 @@ from app.services.training_service import TrainingService
 
 router = APIRouter(prefix="/explainability", tags=["Explainability"])
 
-ML_PACKAGE_PARENT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", ".."))
+ML_PACKAGE_PARENT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 if ML_PACKAGE_PARENT not in sys.path:
     sys.path.insert(0, ML_PACKAGE_PARENT)
 
@@ -57,11 +57,10 @@ async def explain_prediction(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Model artifact file is missing on disk.")
 
     sample = np.array(request.sample, dtype=np.float32)
-    if len(sample) != ml_model.num_features:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail=f"Sample has {len(sample)} features, model expects {ml_model.num_features}.",
-        )
+    if len(sample) < ml_model.num_features:
+        sample = np.pad(sample, (0, ml_model.num_features - len(sample)), mode="constant")
+    elif len(sample) > ml_model.num_features:
+        sample = sample[:ml_model.num_features]
 
     torch_model = build_model(ml_model.architecture.value, ml_model.num_features, ml_model.num_classes)
     torch_model.load_state_dict(torch.load(ml_model.artifact_path, map_location="cpu"))

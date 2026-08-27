@@ -11,7 +11,7 @@ import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import RefreshToken, User
@@ -23,6 +23,9 @@ class AbstractUserRepository(ABC):
 
     @abstractmethod
     async def get_by_id(self, user_id: uuid.UUID) -> User | None: ...
+
+    @abstractmethod
+    async def count_users(self) -> int: ...
 
     @abstractmethod
     async def create(self, user: User) -> User: ...
@@ -54,6 +57,10 @@ class SqlAlchemyUserRepository(AbstractUserRepository):
     async def get_by_id(self, user_id: uuid.UUID) -> User | None:
         result = await self._session.execute(select(User).where(User.id == user_id))
         return result.scalar_one_or_none()
+
+    async def count_users(self) -> int:
+        result = await self._session.execute(select(func.count()).select_from(User))
+        return result.scalar_one() or 0
 
     async def create(self, user: User) -> User:
         self._session.add(user)

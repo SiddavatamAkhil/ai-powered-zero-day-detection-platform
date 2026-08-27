@@ -3,6 +3,7 @@ uvicorn[standard]
 
 sqlalchemy==2.0.35
 asyncpg==0.29.0
+aiosqlite==0.20.0
 alembic==1.13.2
 
 motor==3.6.0
@@ -11,6 +12,14 @@ joblib
 scikit-learn
 pandas
 numpy
+scipy
+pyarrow==17.0.0
+reportlab==4.2.2
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.1
+shap==0.46.0
+lime==0.2.0.1
+matplotlib==3.9.2
 
 pydantic
 pydantic-settings

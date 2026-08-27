@@ -29,6 +29,9 @@ class FakeUserRepository(AbstractUserRepository):
     async def get_by_id(self, user_id):
         return self.users.get(str(user_id))
 
+    async def count_users(self):
+        return len(self.users)
+
     async def create(self, user):
         user.id = user.id or uuid.uuid4()
         self.users[str(user.id)] = user
@@ -65,8 +68,11 @@ def service(repo):
 async def test_register_creates_user(service):
     user = await service.register(UserCreate(email="a@test.com", full_name="A Test", password="password123"))
     assert user.email == "a@test.com"
-    assert user.role == UserRole.VIEWER
+    assert user.role == UserRole.ADMIN
     assert user.hashed_password != "password123"  # never store plaintext
+
+    user2 = await service.register(UserCreate(email="a2@test.com", full_name="A2 Test", password="password123"))
+    assert user2.role == UserRole.VIEWER
 
 
 @pytest.mark.asyncio

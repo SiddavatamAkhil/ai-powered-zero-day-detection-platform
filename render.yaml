@@ -4,6 +4,7 @@ services:
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
+    healthCheckPath: /health
     envVars:
       - key: ENVIRONMENT
         value: production
@@ -13,24 +14,16 @@ services:
         generateValue: true
       - key: BACKEND_CORS_ORIGINS
         value: "https://zeroday-platform-frontend.onrender.com,http://localhost:3000"
-      - key: PORT
-        value: "8000"
-      - key: POSTGRES_HOST
-        value: postgres
-      - key: POSTGRES_USER
-        value: zeroday
-      - key: POSTGRES_PASSWORD
-        value: zeroday_pw
-      - key: POSTGRES_DB
-        value: zeroday_db
 
   - type: web
     name: zeroday-platform-frontend
     runtime: docker
     dockerfilePath: ./frontend/Dockerfile
     dockerContext: ./frontend
+    healthCheckPath: /
+    dockerBuildArgs:
+      - key: NEXT_PUBLIC_API_URL
+        value: "https://ai-powered-zero-day-detection-platform.onrender.com/api/v1"
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: "https://ai-powered-zero-day-detection-platform.onrender.com/api/v1"
-      - key: PORT
-        value: "10000"

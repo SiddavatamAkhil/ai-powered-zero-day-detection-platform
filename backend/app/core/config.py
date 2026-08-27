@@ -10,7 +10,7 @@ Uses pydantic-settings so every config value is:
 from functools import lru_cache
 from typing import List
 
-from pydantic import AnyHttpUrl, field_validator
+from pydantic import AnyHttpUrl, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,13 +34,16 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # --- CORS ---
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
+    BACKEND_CORS_ORIGINS: List[str] = []
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v):
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
+        if isinstance(v, str):
+            if not v.strip():
+                return []
+            if not v.startswith("["):
+                return [i.strip() for i in v.split(",") if i.strip()]
         return v
 
     # --- PostgreSQL ---
@@ -51,9 +54,31 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = "zeroday"
     POSTGRES_PASSWORD: str = "zeroday_pw"
     POSTGRES_DB: str = "zeroday_db"
+    DATABASE_URL_ENV: str | None = Field(None, alias="DATABASE_URL")
 
     @property
     def DATABASE_URL(self) -> str:
+        if self.DATABASE_URL_ENV:
+            url = self.DATABASE_URL_ENV
+            if url.startswith("postgres://"):
+                url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            
+            # If connecting to remote PostgreSQL (e.g. Render), ensure ssl=require is appended
+            if "sqlite" not in url and "ssl=" not in url:
+                if not any(local_host in url for local_host in ["@localhost", "@127.0.0.1", "@postgres:"]):
+                    url += "?ssl=require" if "?" not in url else "&ssl=require"
+            return url
+
+        # Fallback to SQLite if no external DATABASE_URL is set and default 'postgres' host is unresolvable
+        if self.POSTGRES_HOST in ("postgres", "localhost", "127.0.0.1"):
+            import socket
+            try:
+                socket.gethostbyname(self.POSTGRES_HOST)
+            except Exception:
+                return "sqlite+aiosqlite:///./zeroday.db"
+
         url = (
             f"postgresql+asyncpg://"
             f"{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
@@ -61,7 +86,6 @@ class Settings(BaseSettings):
             f"/{self.POSTGRES_DB}"
         )
 
-        # Neon requires SSL in production.
         if self.ENVIRONMENT == "production":
             url += "?ssl=require"
 
@@ -75,26 +99,18 @@ class Settings(BaseSettings):
 
     # --- Redis ---
     # Local Docker defaults
-    # Production values will be supplied through Render.
+    # Production values can be supplied via REDIS_URL OR REDIS_HOST/PORT/PASSWORD.
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_PASSWORD: str = ""
+    REDIS_URL_ENV: str | None = Field(None, alias="REDIS_URL")
 
     @property
     def REDIS_URL(self) -> str:
-        """
-        Build the Redis connection URL.
+        if self.REDIS_URL_ENV:
+            return self.REDIS_URL_ENV
 
-        Local Docker:
-            redis://redis:6379/0
-
-        Production / Upstash:
-            rediss://default:PASSWORD@HOST:6379/0
-
-        rediss:// enables TLS, which is required for
-        the Upstash Redis connection.
-        """
         if self.REDIS_PASSWORD:
             return (
                 f"rediss://default:{self.REDIS_PASSWORD}"
@@ -108,12 +124,12 @@ class Settings(BaseSettings):
         )
 
     # --- File storage ---
-    UPLOAD_DIR: str = "/data/uploads"
-    PROCESSED_DIR: str = "/data/processed"
+    UPLOAD_DIR: str = Field("./data/uploads", alias="UPLOAD_DIR")
+    PROCESSED_DIR: str = Field("./data/processed", alias="PROCESSED_DIR")
     MAX_UPLOAD_SIZE_MB: int = 2048
 
     # --- ML ---
-    MODEL_ARTIFACT_DIR: str = "/data/model_artifacts"
+    MODEL_ARTIFACT_DIR: str = Field("./data/model_artifacts", alias="MODEL_ARTIFACT_DIR")
 
 
 @lru_cache

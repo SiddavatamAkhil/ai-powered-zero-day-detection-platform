@@ -11,11 +11,20 @@
  * "backend" must NOT be used by browser requests.
  */
 
-const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+const DEFAULT_PROD_URL = "https://ai-powered-zero-day-detection-platform.onrender.com/api/v1";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "") ||
-  "http://localhost:8000/api/v1";
+export function getApiUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (envUrl) {
+    return envUrl.replace(/\/$/, "");
+  }
+  if (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+    return DEFAULT_PROD_URL;
+  }
+  return "http://localhost:8000/api/v1";
+}
+
+export const API_URL = getApiUrl();
 
 /* ---------------------------------------------------------
    Token types
@@ -114,23 +123,14 @@ export async function apiFetch<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const tokens = getStoredTokens();
-
+  const baseUrl = getApiUrl();
+  const fullUrl = `${baseUrl}${path}`;
   const headers = new Headers(options.headers);
 
-  /*
-   * Add JWT access token when available.
-   */
   if (tokens?.access_token) {
-    headers.set(
-      "Authorization",
-      `Bearer ${tokens.access_token}`
-    );
+    headers.set("Authorization", `Bearer ${tokens.access_token}`);
   }
 
-  /*
-   * JSON content type for normal requests.
-   * Do not set it for FormData uploads.
-   */
   if (!(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
@@ -138,68 +138,103 @@ export async function apiFetch<T>(
   let response: Response;
 
   try {
-    response = await fetch(`${API_URL}${path}`, {
+    response = await fetch(fullUrl, {
       ...options,
       headers,
     });
   } catch (error) {
-    console.error("API connection failed:", error);
-    console.error("API URL:", API_URL);
-
+    console.error(`[API Error] Request failed for ${fullUrl}:`, error);
     throw new Error(
-      `Unable to connect to backend at ${API_URL}`
+      `Unable to reach backend at ${baseUrl}. Backend may be warming up or offline.`
     );
   }
 
-  /*
-   * If access token expired, refresh it once
-   * and retry the original request.
-   */
   if (response.status === 401) {
     const newAccessToken = await refreshAccessToken();
 
     if (newAccessToken) {
-      headers.set(
-        "Authorization",
-        `Bearer ${newAccessToken}`
-      );
+      headers.set("Authorization", `Bearer ${newAccessToken}`);
 
       try {
-        response = await fetch(`${API_URL}${path}`, {
+        response = await fetch(fullUrl, {
           ...options,
           headers,
         });
-      } catch {
-        throw new Error(
-          `Unable to connect to backend at ${API_URL}`
-        );
+      } catch (err) {
+        console.error(`[API Error] Retry failed for ${fullUrl}:`, err);
+        throw new Error(`Unable to reach backend at ${API_URL}`);
+      }
+    } else {
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
       }
     }
   }
 
-  /*
-   * Handle API errors.
-   */
   if (!response.ok) {
-    const body = await response
-      .json()
-      .catch(() => ({
-        detail: response.statusText,
-      }));
-
-    throw new Error(
-      body?.detail ?? "Request failed"
-    );
+    const body = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(body?.detail ?? `Request to ${path} failed (HTTP ${response.status})`);
   }
 
-  /*
-   * 204 No Content.
-   */
   if (response.status === 204) {
     return undefined as T;
   }
 
   return response.json() as Promise<T>;
+}
+
+/* ---------------------------------------------------------
+   Generic authenticated blob download
+--------------------------------------------------------- */
+
+export async function downloadBlob(
+  path: string,
+  options: RequestInit = {}
+): Promise<Blob> {
+  const tokens = getStoredTokens();
+  const headers = new Headers(options.headers);
+  const fullUrl = `${API_URL}${path}`;
+
+  if (tokens?.access_token) {
+    headers.set("Authorization", `Bearer ${tokens.access_token}`);
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(fullUrl, {
+      ...options,
+      headers,
+    });
+  } catch (error) {
+    console.error(`[API Error] Request failed for ${fullUrl}:`, error);
+    throw new Error(
+      `Unable to reach backend at ${API_URL}. Backend may be warming up or offline.`
+    );
+  }
+
+  if (response.status === 401) {
+    const newAccessToken = await refreshAccessToken();
+    if (newAccessToken) {
+      headers.set("Authorization", `Bearer ${newAccessToken}`);
+      try {
+        response = await fetch(fullUrl, { ...options, headers });
+      } catch (err) {
+        throw new Error(`Unable to reach backend at ${API_URL}`);
+      }
+    } else {
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
+    }
+  }
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(body?.detail ?? `Download from ${path} failed (HTTP ${response.status})`);
+  }
+
+  return response.blob();
 }
 
 /* ---------------------------------------------------------
@@ -210,10 +245,13 @@ export async function login(
   email: string,
   password: string
 ): Promise<AuthTokens> {
+  const targetUrl = `${API_URL}/auth/login`;
+  console.log(`[API] Login request to: ${targetUrl}`);
+
   let response: Response;
 
   try {
-    response = await fetch(`${API_URL}/auth/login`, {
+    response = await fetch(targetUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -224,28 +262,33 @@ export async function login(
       }),
     });
   } catch (error) {
-    console.error("Login connection error:", error);
-    console.error("API URL:", API_URL);
-
+    console.error(`[API Error] Network failure connecting to ${targetUrl}:`, error);
     throw new Error(
-      `Failed to connect to backend at ${API_URL}`
+      `Unable to reach backend at ${API_URL}. If using Render free tier, the backend may be spinning up (~45s cold start). Please wait 30 seconds and try again.`
     );
   }
 
-  if (!response.ok) {
-    const body = await response
-      .json()
-      .catch(() => null);
+  console.log(`[API Response] Status: ${response.status} ${response.statusText} from ${targetUrl}`);
 
-    throw new Error(
-      body?.detail ?? "Invalid email or password."
-    );
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const detail = body?.detail;
+
+    if (response.status === 401) {
+      throw new Error(detail ?? "Invalid email or password.");
+    } else if (response.status === 404) {
+      throw new Error(`Endpoint not found (404) at ${targetUrl}. Please verify API URL configuration.`);
+    } else if (response.status >= 500) {
+      throw new Error(
+        `Backend database/server error (HTTP ${response.status}). ${detail ? `Detail: ${detail}` : 'Please check backend logs on Render.'}`
+      );
+    }
+
+    throw new Error(detail ?? `Login request failed with status ${response.status}`);
   }
 
   const tokens = (await response.json()) as AuthTokens;
-
   storeTokens(tokens);
-
   return tokens;
 }
 

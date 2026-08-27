@@ -10,12 +10,31 @@ Kept minimal on purpose:
 All business logic lives in services.
 """
 
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+import app.models  # Ensures all ORM models register in Base.metadata
 from app.api.v1.router import api_router
 from app.core.audit_middleware import AuditLogMiddleware
 from app.core.config import settings
+from app.db.session import Base, engine
+
+
+# ---------------------------------------------------------
+# Lifespan — Automatic table initialization on startup
+# ---------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("Database tables initialized successfully.")
+    except Exception as e:
+        print(f"Startup DB init notice (tables may already exist or DB offline): {e}")
+    yield
 
 
 # ---------------------------------------------------------
@@ -32,7 +51,21 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_PREFIX}/openapi.json",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
+
+
+# ---------------------------------------------------------
+# Global Exception Handler — Ensures 500s return JSON
+# ---------------------------------------------------------
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"Unhandled Exception on {request.method} {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal Server Error: {str(exc)}"},
+    )
 
 
 # ---------------------------------------------------------
@@ -43,25 +76,14 @@ app.add_middleware(AuditLogMiddleware)
 
 
 # ---------------------------------------------------------
-# CORS
-# ---------------------------------------------------------
-#
-# Frontend:
-#     http://localhost:3000
-#
-# Backend:
-#     http://localhost:8000
-#
-# The browser needs permission to make requests from
-# localhost:3000 to localhost:8000.
+# CORS Configuration (Must wrap outer request pipeline)
 # ---------------------------------------------------------
 
 configured_origins = [
-    str(origin).rstrip("/")
+    str(origin).rstrip("/").lower()
     for origin in settings.BACKEND_CORS_ORIGINS
 ]
 
-# Make sure the local frontend is always allowed.
 required_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -72,13 +94,16 @@ for origin in required_origins:
     if origin not in configured_origins:
         configured_origins.append(origin)
 
+allow_all = "*" in configured_origins
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=configured_origins,
-    allow_credentials=True,
+    allow_origins=["*"] if allow_all else configured_origins,
+    allow_origin_regex=r"https://.*\.onrender\.com" if not allow_all else None,
+    allow_credentials=not allow_all,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
@@ -93,12 +118,19 @@ app.include_router(
 
 
 # ---------------------------------------------------------
-# Health check
+# System Routes
 # ---------------------------------------------------------
+
+@app.get("/", tags=["System"])
+async def root():
+    return {
+        "message": "AI-Powered Zero-Day Detection Platform API is running"
+    }
+
 
 @app.get("/health", tags=["System"])
 async def health_check():
     return {
-        "status": "ok",
+        "status": "healthy",
         "environment": settings.ENVIRONMENT,
-    }
+    }

@@ -53,7 +53,10 @@ class ExplainabilityService:
         predicted_idx = int(np.argmax(proba))
 
         # shap_values is a list of arrays (one per class) for multi-class output
-        class_shap = shap_values[predicted_idx][0] if isinstance(shap_values, list) else shap_values[0]
+        if isinstance(shap_values, list):
+            class_shap = np.asarray(shap_values[predicted_idx]).squeeze()
+        else:
+            class_shap = np.asarray(shap_values).squeeze()
 
         contributions = self._top_k_contributions(class_shap, top_k)
         return ExplanationResult(
@@ -89,8 +92,15 @@ class ExplainabilityService:
         )
 
     def _top_k_contributions(self, values: np.ndarray, top_k: int) -> list[FeatureContribution]:
-        order = np.argsort(np.abs(values))[::-1][:top_k]
+        values_arr = np.asarray(values).squeeze()
+        if values_arr.ndim > 1:
+            values_arr = values_arr.flatten()
+        values_arr = values_arr[: len(self._feature_names)]
+        order = np.argsort(np.abs(values_arr))[::-1][:top_k]
         return [
-            FeatureContribution(feature_name=self._feature_names[i], contribution=float(values[i]))
-            for i in order
+            FeatureContribution(
+                feature_name=self._feature_names[int(idx)],
+                contribution=float(values_arr[int(idx)])
+            )
+            for idx in order
         ]

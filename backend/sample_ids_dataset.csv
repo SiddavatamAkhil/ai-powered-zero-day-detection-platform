@@ -1,0 +1,13 @@
+flow_duration,total_fwd_packets,total_bwd_packets,label
+100,10,5,BENIGN
+200,20,10,BENIGN
+150,15,8,BENIGN
+300,30,15,BENIGN
+250,25,12,BENIGN
+120,12,6,BENIGN
+180,18,9,DDoS
+210,21,10,DDoS
+190,19,9,DDoS
+220,22,11,DDoS
+310,31,15,PortScan
+400,40,20,PortScan

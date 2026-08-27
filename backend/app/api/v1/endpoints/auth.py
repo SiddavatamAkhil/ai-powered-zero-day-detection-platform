@@ -18,6 +18,10 @@ from app.schemas.user import (
 from app.services.auth_service import AuthError, AuthService
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/auth",
     tags=["Authentication"],
@@ -36,13 +40,20 @@ async def register(
 ):
     try:
         user = await auth_service.register(payload)
+        return user
     except AuthError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         )
-
-    return user
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Unexpected error during registration for {payload.email}: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration server error: {str(exc)}",
+        )
 
 
 @router.post(
@@ -66,6 +77,14 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Unexpected error during login for {payload.email}: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login server error: {str(exc)}",
         )
 
 

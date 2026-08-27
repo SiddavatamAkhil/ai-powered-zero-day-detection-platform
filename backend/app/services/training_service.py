@@ -26,7 +26,7 @@ import os
 import sys
 import uuid
 
-ML_PACKAGE_PARENT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+ML_PACKAGE_PARENT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 if ML_PACKAGE_PARENT not in sys.path:
     sys.path.insert(0, ML_PACKAGE_PARENT)
 

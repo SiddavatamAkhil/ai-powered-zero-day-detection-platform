@@ -27,11 +27,15 @@ class AuthService:
 
         # First registered user becomes admin; everyone else defaults to
         # viewer and is promoted later via the User Management module.
+        user_count = await self._repo.count_users()
+        role = UserRole.ADMIN if user_count == 0 else UserRole.VIEWER
+
         user = User(
             email=data.email,
             full_name=data.full_name,
             hashed_password=hash_password(data.password),
-            role=UserRole.VIEWER,
+            role=role,
+            is_active=True,
         )
         return await self._repo.create(user)
 
