@@ -58,18 +58,39 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL(self) -> str:
-        if self.DATABASE_URL_ENV:
-            url = self.DATABASE_URL_ENV
+        from urllib.parse import quote_plus, unquote, urlparse, urlunparse
+
+        def _clean_url(raw_url: str) -> str:
+            if "sqlite" in raw_url:
+                return raw_url
+
+            url = raw_url
             if url.startswith("postgres://"):
                 url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-            elif url.startswith("postgresql://"):
+            elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
                 url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-            
-            # If connecting to remote PostgreSQL (e.g. Render), ensure ssl=require is appended
-            if "sqlite" not in url and "ssl=" not in url:
+
+            try:
+                parsed = urlparse(url)
+                if "@" in parsed.netloc:
+                    userinfo, hostinfo = parsed.netloc.rsplit("@", 1)
+                    if ":" in userinfo:
+                        user, pwd = userinfo.split(":", 1)
+                        clean_user = quote_plus(unquote(user))
+                        clean_pwd = quote_plus(unquote(pwd))
+                        new_netloc = f"{clean_user}:{clean_pwd}@{hostinfo}"
+                        url = urlunparse((parsed.scheme, new_netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+            except Exception:
+                pass
+
+            if "ssl=" not in url:
                 if not any(local_host in url for local_host in ["@localhost", "@127.0.0.1", "@postgres:"]):
                     url += "?ssl=require" if "?" not in url else "&ssl=require"
+
             return url
+
+        if self.DATABASE_URL_ENV:
+            return _clean_url(self.DATABASE_URL_ENV)
 
         # Fallback to SQLite if no external DATABASE_URL is set and default 'postgres' host is unresolvable
         if self.POSTGRES_HOST in ("postgres", "localhost", "127.0.0.1"):
@@ -79,17 +100,13 @@ class Settings(BaseSettings):
             except Exception:
                 return "sqlite+aiosqlite:///./zeroday.db"
 
-        url = (
+        raw_generated = (
             f"postgresql+asyncpg://"
-            f"{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"{quote_plus(self.POSTGRES_USER)}:{quote_plus(self.POSTGRES_PASSWORD)}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}"
             f"/{self.POSTGRES_DB}"
         )
-
-        if self.ENVIRONMENT == "production":
-            url += "?ssl=require"
-
-        return url
+        return _clean_url(raw_generated)
 
     # --- MongoDB ---
     # Local Docker default

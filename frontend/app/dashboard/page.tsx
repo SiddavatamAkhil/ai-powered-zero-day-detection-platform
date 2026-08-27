@@ -63,25 +63,32 @@ export default function DashboardPage() {
       setError(null);
 
       try {
-        const dsList = await api.listDatasets();
+        const dsList = await api.listDatasets().catch((e) => {
+          console.warn("[Dashboard] Datasets fetch notice:", e);
+          return [];
+        });
         setDatasets(dsList);
 
-        if (dsList.length > 0) {
+        if (dsList && dsList.length > 0) {
           const firstDsModels = await api.compareModels(dsList[0].id).catch(() => []);
           setModels(firstDsModels);
         }
 
         const actData = await apiFetch<{ buckets: ActivityBucket[] }>("/activity-summary?hours=24")
-          .then((res) => res.buckets)
+          .then((res) => res?.buckets ?? [])
           .catch(() => []);
         setActivity(actData);
 
         const logsData = await apiFetch<AuditLog[]>("/logs")
-          .then((res) => res.slice(0, 5))
+          .then((res) => (Array.isArray(res) ? res.slice(0, 5) : []))
           .catch(() => []);
         setRecentLogs(logsData);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load dashboard statistics.");
+        const msg = err instanceof Error ? err.message : "Failed to load dashboard statistics.";
+        console.error("[Dashboard] Load error:", msg);
+        if (msg.includes("Unable to reach backend")) {
+          setError(msg);
+        }
       } finally {
         setLoading(false);
       }

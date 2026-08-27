@@ -26,6 +26,22 @@ export function getApiUrl(): string {
 
 export const API_URL = getApiUrl();
 
+/**
+ * Dedicated health check helper.
+ * Requests root /health endpoint (e.g. https://domain.com/health),
+ * correctly stripping /api/v1 prefix from the base URL.
+ */
+export async function checkBackendHealth(): Promise<boolean> {
+  const baseUrl = getApiUrl();
+  const rootHealthUrl = baseUrl.replace(/\/api\/v1\/?$/, "") + "/health";
+  try {
+    const res = await fetch(rootHealthUrl, { method: "GET", cache: "no-store" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /* ---------------------------------------------------------
    Token types
 --------------------------------------------------------- */
@@ -384,4 +400,6 @@ export const api = {
       is_active?: boolean;
       id?: string;
     }>("/auth/me"),
+
+  checkHealth: checkBackendHealth,
 };
