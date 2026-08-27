@@ -94,8 +94,8 @@ class Settings(BaseSettings):
 
                 if ":" in user_pwd:
                     user, pwd = user_pwd.split(":", 1)
-                    clean_u = quote_plus(unquote(user))
-                    clean_p = quote_plus(unquote(pwd))
+                    clean_u = quote(unquote(user), safe="")
+                    clean_p = quote(unquote(pwd), safe="")
                     authority = f"{clean_u}:{clean_p}@{host_port}"
 
             url = f"postgresql+asyncpg://{authority}{path}{query}"
@@ -127,8 +127,48 @@ class Settings(BaseSettings):
     # --- MongoDB ---
     # Local Docker default
     # Production MONGO_URI will be supplied through Render.
-    MONGO_URI: str = "mongodb://mongo:27017"
+    MONGO_URI_ENV: str | None = Field(None, alias="MONGO_URI")
     MONGO_DB_NAME: str = "zeroday_docs"
+
+    @property
+    def MONGO_URI(self) -> str:
+        from urllib.parse import quote_plus, unquote
+        raw_url = self.MONGO_URI_ENV or "mongodb://mongo:27017"
+
+        prefix_found = None
+        for prefix in ["mongodb+srv://", "mongodb://"]:
+            if raw_url.startswith(prefix):
+                prefix_found = prefix
+                break
+
+        if not prefix_found:
+            return raw_url
+
+        rest = raw_url[len(prefix_found):]
+        query = ""
+        if "?" in rest:
+            rest, query_str = rest.split("?", 1)
+            query = "?" + query_str
+
+        path = ""
+        if "/" in rest:
+            authority, path_str = rest.split("/", 1)
+            path = "/" + path_str
+        else:
+            authority = rest
+
+        if "@" in authority:
+            parts = authority.split("@")
+            host_port = parts[-1]
+            user_pwd = "@".join(parts[:-1])
+
+            if ":" in user_pwd:
+                user, pwd = user_pwd.split(":", 1)
+                clean_u = quote(unquote(user), safe="")
+                clean_p = quote(unquote(pwd), safe="")
+                authority = f"{clean_u}:{clean_p}@{host_port}"
+
+        return f"{prefix_found}{authority}{path}{query}"
 
     # --- Redis ---
     # Local Docker defaults
