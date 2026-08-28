@@ -19,9 +19,22 @@ export default function ModelsPage() {
     setLoading(true);
     api
       .listDatasets()
-      .then((ds) => {
+      .then(async (ds) => {
         setDatasets(ds);
-        if (ds.length > 0) setSelectedDatasetId(ds[0].id);
+        if (ds.length === 0) return;
+        // Auto-select the first dataset that has trained models
+        for (const d of ds) {
+          try {
+            const ms = await api.compareModels(d.id);
+            if (ms.length > 0) {
+              setSelectedDatasetId(d.id);
+              setModels(ms);
+              return;
+            }
+          } catch {}
+        }
+        // Fall back to first dataset if none have models
+        setSelectedDatasetId(ds[0].id);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -65,7 +78,7 @@ export default function ModelsPage() {
           >
             {datasets.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.name}
+                {d.name} ({d.status})
               </option>
             ))}
           </select>

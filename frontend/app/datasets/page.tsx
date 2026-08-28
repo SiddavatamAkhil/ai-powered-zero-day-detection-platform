@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Database, FileUp, Sparkles, AlertCircle, RefreshCw, CheckCircle2, Sliders, Layers } from "lucide-react";
+import { Database, FileUp, Sparkles, AlertCircle, RefreshCw, CheckCircle2, Sliders, Layers, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { InfoPanel } from "@/components/ui/InfoPanel";
 import { StepProgressLoader, ProgressStage } from "@/components/ui/StepProgressLoader";
@@ -61,8 +61,29 @@ export default function DatasetsPage() {
     }
   }
 
+  async function handleDelete(datasetId: string) {
+    if (!confirm("Delete this dataset? This cannot be undone.")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteDataset(datasetId);
+      if (selected?.id === datasetId) setSelected(null);
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const demoAlreadyExists = datasets.some((d) => d.name === "NSL-KDD Demo Flow Matrix");
+
   // Load Demo Dataset feature
   async function handleLoadDemoDataset() {
+    if (demoAlreadyExists) {
+      setError("Demo dataset already exists. Delete it first before reloading.");
+      return;
+    }
     setDemoLoading(true);
     setError(null);
     try {
@@ -107,8 +128,28 @@ export default function DatasetsPage() {
       form.append("file", demoFile);
 
       const createdDs = await apiFetch<Dataset>("/datasets/upload", { method: "POST", body: form });
+
+      // Auto-run the full pipeline so the dataset is immediately ready to train
+      const id = createdDs.id;
+      await apiFetch(`/datasets/${id}/profile`, { method: "POST" });
+      await apiFetch(`/datasets/${id}/clean`, { method: "POST" });
+      await apiFetch(`/datasets/${id}/feature-engineer`, { method: "POST" });
+      await apiFetch(`/datasets/${id}/open-set-split`, {
+        method: "POST",
+        body: JSON.stringify({
+          assignments: [
+            { class_name: "benign", split: "known" },
+            { class_name: "dos", split: "known" },
+            { class_name: "probe", split: "known" },
+            { class_name: "r2l", split: "known" },
+            { class_name: "u2r", split: "known" },
+          ],
+        }),
+      });
+
       refresh();
-      setSelected(createdDs);
+      const ready = await api.getDataset(id);
+      setSelected(ready);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load demo dataset.");
     } finally {
@@ -190,11 +231,11 @@ export default function DatasetsPage() {
         {/* Demo Support Option */}
         <button
           onClick={handleLoadDemoDataset}
-          disabled={demoLoading || busy}
+          disabled={demoLoading || busy || demoAlreadyExists}
           className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-accent-blue/10 text-accent-blue text-xs font-semibold border border-accent-blue/20 hover:bg-accent-blue/20 transition-all disabled:opacity-50"
         >
           {demoLoading ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          <span>Load Demo Dataset</span>
+          <span>{demoLoading ? "Preparing Demo..." : "Load Demo Dataset"}</span>
         </button>
       </div>
 
@@ -293,6 +334,7 @@ export default function DatasetsPage() {
                   <th className="pb-2.5 font-semibold">Rows</th>
                   <th className="pb-2.5 font-semibold">Classes (Known / Unknown)</th>
                   <th className="pb-2.5 font-semibold text-right">Pipeline Actions</th>
+                  <th className="pb-2.5 font-semibold text-right"></th>
                 </tr>
               </thead>
               <tbody>
@@ -345,6 +387,16 @@ export default function DatasetsPage() {
                           Engineer Matrix
                         </button>
                       </div>
+                    </td>
+                    <td className="py-3 text-right">
+                      <button
+                        onClick={() => handleDelete(d.id)}
+                        disabled={busy}
+                        title="Delete dataset"
+                        className="p-1.5 rounded hover:bg-severity-critical/20 text-slate-500 hover:text-severity-critical border border-transparent hover:border-severity-critical/30 transition-colors disabled:opacity-30"
+                      >
+                        <Trash2 size={13} />
+                      </button>
                     </td>
                   </tr>
                 ))}
