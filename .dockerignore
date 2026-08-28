@@ -4,3 +4,12 @@
 **/__pycache__
 **/.git
 *.log
+
+# Keep frontend out of the backend Docker build context
+frontend/
+
+# Dev/docs artifacts
+k8s/
+docs/
+*.md
+.github/

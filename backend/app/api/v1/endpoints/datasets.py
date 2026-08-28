@@ -112,6 +112,18 @@ async def feature_engineer_dataset(
     return {"message": "Feature engineering complete.", "num_features": len(result.feature_columns)}
 
 
+@router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_dataset(
+    dataset_id: uuid.UUID,
+    user: User = Depends(_can_edit),
+    service: DatasetService = Depends(get_dataset_service),
+):
+    try:
+        await service.delete(dataset_id)
+    except DatasetError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
 @router.post("/{dataset_id}/open-set-split")
 async def configure_open_set_split(
     dataset_id: uuid.UUID,

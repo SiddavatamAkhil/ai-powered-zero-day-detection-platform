@@ -43,6 +43,12 @@ class AbstractDatasetRepository(ABC):
     @abstractmethod
     async def get_unknown_classes(self, dataset_id: uuid.UUID) -> list[str]: ...
 
+    @abstractmethod
+    async def delete(self, dataset_id: uuid.UUID) -> None: ...
+
+    @abstractmethod
+    async def find_by_filename(self, original_filename: str) -> Dataset | None: ...
+
 
 class SqlAlchemyDatasetRepository(AbstractDatasetRepository):
     def __init__(self, session: AsyncSession):
@@ -132,3 +138,15 @@ class SqlAlchemyDatasetRepository(AbstractDatasetRepository):
             )
         )
         return [row[0] for row in result.all()]
+
+    async def delete(self, dataset_id: uuid.UUID) -> None:
+        dataset = await self.get_by_id(dataset_id)
+        if dataset:
+            await self._session.delete(dataset)
+            await self._session.commit()
+
+    async def find_by_filename(self, original_filename: str) -> Dataset | None:
+        result = await self._session.execute(
+            select(Dataset).where(Dataset.original_filename == original_filename)
+        )
+        return result.scalar_one_or_none()
