@@ -79,22 +79,35 @@ app.add_middleware(AuditLogMiddleware)
 # CORS Configuration (Must wrap outer request pipeline)
 # ---------------------------------------------------------
 
+# Normalize configured origins from environment
 configured_origins = [
     str(origin).rstrip("/").lower()
     for origin in settings.BACKEND_CORS_ORIGINS
 ]
 
+# Required origins for local development and production
 required_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "https://zeroday-platform-frontend.onrender.com",
 ]
 
-for origin in required_origins:
+# Normalize required origins to lowercase for safe comparison
+required_origins_lower = [o.lower() for o in required_origins]
+
+# Add any missing required origins
+for origin in required_origins_lower:
     if origin not in configured_origins:
         configured_origins.append(origin)
 
 allow_all = "*" in configured_origins
+
+# Debug logging for CORS configuration
+print(f"\n=== CORS Configuration Debug ===")
+print(f"Environment BACKEND_CORS_ORIGINS: {settings.BACKEND_CORS_ORIGINS}")
+print(f"Configured Origins (normalized): {configured_origins}")
+print(f"Allow All Origins: {allow_all}")
+print(f"================================\n")
 
 app.add_middleware(
     CORSMiddleware,
@@ -133,4 +146,4 @@ async def health_check():
     return {
         "status": "healthy",
         "environment": settings.ENVIRONMENT,
-    }
+    }
