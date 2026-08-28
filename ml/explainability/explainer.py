@@ -46,19 +46,17 @@ class ExplainabilityService:
     def explain_with_shap(self, sample: np.ndarray, top_k: int = 10) -> ExplanationResult:
         import shap
 
-        background = np.asarray(self._background, dtype=np.float64)
-        sample_2d = np.asarray(sample, dtype=np.float64).reshape(1, -1)
-        explainer = shap.KernelExplainer(self._predict_proba, background)
-        shap_values = explainer.shap_values(sample_2d, nsamples=100)
+        explainer = shap.KernelExplainer(self._predict_proba, self._background)
+        shap_values = explainer.shap_values(sample.reshape(1, -1), nsamples=100)
 
-        proba = self._predict_proba(sample_2d)[0]
+        proba = self._predict_proba(sample.reshape(1, -1))[0]
         predicted_idx = int(np.argmax(proba))
 
         # shap_values is a list of arrays (one per class) for multi-class output
         if isinstance(shap_values, list):
-            class_shap = np.asarray(shap_values[predicted_idx], dtype=np.float64).squeeze()
+            class_shap = np.asarray(shap_values[predicted_idx]).squeeze()
         else:
-            class_shap = np.asarray(shap_values, dtype=np.float64).squeeze()
+            class_shap = np.asarray(shap_values).squeeze()
 
         contributions = self._top_k_contributions(class_shap, top_k)
         return ExplanationResult(

@@ -365,9 +365,6 @@ export const api = {
   getDataset: (id: string) =>
     apiFetch<Dataset>(`/datasets/${id}`),
 
-  deleteDataset: (id: string) =>
-    apiFetch<void>(`/datasets/${id}`, { method: "DELETE" }),
-
   /*
    * Model comparison
    */

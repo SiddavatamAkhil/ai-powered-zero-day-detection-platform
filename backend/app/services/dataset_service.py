@@ -53,10 +53,6 @@ class DatasetService:
         if len(file_bytes) == 0:
             raise DatasetError("Uploaded file is empty.")
 
-        existing = await self._repo.find_by_filename(original_filename)
-        if existing:
-            raise DatasetError(f"A dataset with the filename '{original_filename}' already exists. Delete it first or rename the file.")
-
         # Strip any directory components the client sent (e.g. "../../etc/passwd.csv")
         # before building a path — never trust a client-supplied filename for path construction.
         safe_filename = os.path.basename(original_filename)
@@ -161,46 +157,6 @@ class DatasetService:
 
     async def list_all(self) -> list[Dataset]:
         return await self._repo.list_all()
-
-    async def delete(self, dataset_id: uuid.UUID) -> None:
-        import sqlalchemy as sa
-        from app.models.ml_model import MLModel, TrainingRun
-
-        dataset = await self._require_dataset(dataset_id)
-
-        # Delete files from disk
-        for path in [dataset.raw_path, dataset.cleaned_path, dataset.features_path, dataset.scaler_path]:
-            if path and os.path.exists(path):
-                try:
-                    os.remove(path)
-                except OSError:
-                    pass
-
-        # Cascade: delete ml_models → training_runs → dataset_classes → dataset
-        session = self._repo._session
-        run_ids = (await session.execute(
-            sa.select(TrainingRun.id).where(TrainingRun.dataset_id == dataset_id)
-        )).scalars().all()
-
-        if run_ids:
-            # Delete model artifact files and model rows
-            models = (await session.execute(
-                sa.select(MLModel).where(MLModel.training_run_id.in_(run_ids))
-            )).scalars().all()
-            for m in models:
-                for path in [m.artifact_path, m.openmax_path, m.background_data_path]:
-                    if path and os.path.exists(path):
-                        try:
-                            os.remove(path)
-                        except OSError:
-                            pass
-                await session.delete(m)
-
-            await session.execute(
-                sa.delete(TrainingRun).where(TrainingRun.dataset_id == dataset_id)
-            )
-
-        await self._repo.delete(dataset_id)
 
     async def _require_dataset(self, dataset_id: uuid.UUID) -> Dataset:
         dataset = await self._repo.get_by_id(dataset_id)
