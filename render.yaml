@@ -17,7 +17,7 @@ services:
       - key: REFRESH_TOKEN_EXPIRE_DAYS
         value: "7"
       - key: BACKEND_CORS_ORIGINS
-        value: "https://zeroday-platform-frontend.onrender.com,http://localhost:3000,http://127.0.0.1:3000"
+        value: '["https://zeroday-platform-frontend.onrender.com","http://localhost:3000","http://127.0.0.1:3000"]'
       - key: DATABASE_URL
         fromDatabase:
           name: zeroday-postgres
