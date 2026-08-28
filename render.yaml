@@ -13,7 +13,7 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: BACKEND_CORS_ORIGINS
-        value: "https://zeroday-platform-frontend.onrender.com,http://localhost:3000"
+        value: "https://zeroday-platform-frontend.onrender.com,http://localhost:3000,http://127.0.0.1:3000"
 
   - type: web
     name: zeroday-platform-frontend
