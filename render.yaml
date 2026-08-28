@@ -5,10 +5,6 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
     healthCheckPath: /health
-    disk:
-      name: zeroday-data
-      mountPath: /data
-      sizeGB: 10
     envVars:
       - key: ENVIRONMENT
         value: production
@@ -29,16 +25,13 @@ services:
       - key: MONGO_URI
         value: ""
       - key: REDIS_URL
-        fromService:
-          name: zeroday-redis
-          type: redis
-          property: connectionString
+        value: ""
       - key: UPLOAD_DIR
-        value: /data/uploads
+        value: /tmp/uploads
       - key: MODEL_ARTIFACT_DIR
-        value: /data/model_artifacts
+        value: /tmp/model_artifacts
       - key: PROCESSED_DIR
-        value: /data/processed
+        value: /tmp/processed
       - key: MAX_UPLOAD_SIZE_MB
         value: "2048"
       - key: PYTHONPATH
@@ -60,7 +53,4 @@ databases:
   - name: zeroday-postgres
     databaseName: zeroday_db
     user: zeroday
-    plan: free
-
-  - name: zeroday-redis
     plan: free
