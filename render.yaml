@@ -50,9 +50,6 @@ services:
     dockerfilePath: ./frontend/Dockerfile
     dockerContext: ./frontend
     healthCheckPath: /
-    dockerBuildArgs:
-      - key: NEXT_PUBLIC_API_URL
-        value: "https://ai-powered-zero-day-detection-platform.onrender.com/api/v1"
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: "https://ai-powered-zero-day-detection-platform.onrender.com/api/v1"
