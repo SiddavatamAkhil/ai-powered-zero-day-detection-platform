@@ -34,7 +34,38 @@ async def lifespan(app: FastAPI):
         print("Database tables initialized successfully.")
     except Exception as e:
         print(f"Startup DB init notice (tables may already exist or DB offline): {e}")
+
+    await _seed_admin()
     yield
+
+
+async def _seed_admin():
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from app.db.session import AsyncSessionLocal
+    from app.models.user import User, UserRole
+    from app.core.security import hash_password
+    from sqlalchemy import select
+
+    try:
+        async with AsyncSessionLocal() as session:
+            email = settings.ADMIN_EMAIL.strip().lower()
+            existing = (await session.execute(
+                select(User).where(User.email == email)
+            )).scalar_one_or_none()
+            if not existing:
+                session.add(User(
+                    email=email,
+                    full_name=settings.ADMIN_NAME,
+                    hashed_password=hash_password(settings.ADMIN_PASSWORD),
+                    role=UserRole.ADMIN,
+                    is_active=True,
+                ))
+                await session.commit()
+                print(f"Admin user seeded: {email}")
+            else:
+                print(f"Admin user already exists: {email}")
+    except Exception as e:
+        print(f"Admin seed notice: {e}")
 
 
 # ---------------------------------------------------------

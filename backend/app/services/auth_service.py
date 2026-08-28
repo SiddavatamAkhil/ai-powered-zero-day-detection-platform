@@ -19,8 +19,8 @@ from app.repositories.user_repository import AbstractUserRepository
 from app.schemas.user import TokenPair, UserCreate
 
 
-# Your admin email
-ADMIN_EMAIL = "siddavatamakhil0204@gmail.com"
+from app.core.config import settings as _settings
+ADMIN_EMAIL = _settings.ADMIN_EMAIL
 
 
 class AuthError(Exception):
