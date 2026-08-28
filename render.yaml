@@ -32,12 +32,6 @@ services:
         value: /tmp/model_artifacts
       - key: PROCESSED_DIR
         value: /tmp/processed
-      - key: ADMIN_EMAIL
-        value: "siddavatamakhil0204@gmail.com"
-      - key: ADMIN_PASSWORD
-        generateValue: true
-      - key: ADMIN_NAME
-        value: "Admin"
       - key: MAX_UPLOAD_SIZE_MB
         value: "2048"
       - key: PYTHONPATH
